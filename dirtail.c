@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <signal.h>
 
 #define MAX_ENTRIES 32
 #define SNOZE 1
@@ -26,6 +27,12 @@ void close_all()
 		fclose(entries[i].fh);
 		fprintf(stderr,"%s closed\n",entries[i].filename);
 	}
+}
+
+void shutdown(int a)
+{
+	close_all();
+	exit(0);
 }
 
 int captured(char *filename)
@@ -70,7 +77,7 @@ void update()
 int main(int argc, char **argv)
 {
 	memset(entries,0,sizeof(entries));
-
+	signal(SIGINT, shutdown);
 	while(1) {
 		char buf[1024];
 		struct stat st_,*st=&st_;
@@ -91,7 +98,6 @@ int main(int argc, char **argv)
 		if(!foundit)
         		sleep(SNOZE);
 	}
-	close_all();
 
 	return 0;
 }
