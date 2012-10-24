@@ -9,7 +9,7 @@
 #include <signal.h>
 
 #define MAX_ENTRIES 32
-#define SNOZE 1
+#define SNOOZE 1
 
 struct {
 	time_t mtime;
@@ -96,7 +96,7 @@ int main(int argc, char **argv)
 			}
 		}
 		if(!foundit)
-        		sleep(SNOZE);
+        		sleep(SNOOZE);
 	}
 
 	return 0;
