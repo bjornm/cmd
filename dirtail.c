@@ -8,7 +8,7 @@
 #include <ctype.h>
 #include <signal.h>
 
-#define MAX_ENTRIES 32
+#define MAX_ENTRIES 256
 #define SNOOZE 1
 
 struct {
@@ -17,19 +17,24 @@ struct {
 	char filename[256];
 } entries[MAX_ENTRIES];
 
-int nextfree = 0;
+void close_entry(int entry) 
+{
+	fclose(entries[entry].fh);
+	fprintf(stderr,"%s closed\n",entries[entry].filename);
+	entries[entry].mtime = 0;
+}
 
-void close_all()
+void close_all() 
 {
 	int i;
-	for(i=0;;i++) {
-		if(!entries[i].mtime) break;
-		fclose(entries[i].fh);
-		fprintf(stderr,"%s closed\n",entries[i].filename);
+	for(i = 0; i < MAX_ENTRIES ; i++) {
+		if(entries[i].mtime) {
+			close_entry(i);
+		}
 	}
 }
 
-void shutdown(int a)
+void shutdown(int a) 
 {
 	close_all();
 	exit(0);
@@ -38,18 +43,27 @@ void shutdown(int a)
 int captured(char *filename)
 {
 	int i;
-	for(i=0;;i++) {
-		if(!entries[i].mtime)
-			break;
-		if(strcmp(entries[i].filename,filename) == 0)
+	for(i = 0; i < MAX_ENTRIES ; i++) {
+		if (entries[i].mtime && strcmp(entries[i].filename,filename) == 0)
 			return 1;
 	}
 	return 0;
 }
 
+int find_next_free() 
+{
+	int i;
+	for(i = 0; i < MAX_ENTRIES ; i++) {
+		if (!entries[i].mtime) {
+			return i;
+		}
+	}
+	return -1;
+}
+
 void update()
 {
-	int i = 0;
+	int nextfree = 0;
 	DIR *dir;
 	struct dirent *ent;
 	dir = opendir(".");	
@@ -58,19 +72,18 @@ void update()
 		stat(ent->d_name, st);
 		if(S_ISREG(st->st_mode) && !captured(ent->d_name)) {
 			printf("*** capturing entry: %s ***\n",ent->d_name);
+			nextfree = find_next_free();
+			if (nextfree == -1) {
+				fprintf(stderr,"more than max files (%d) in folder, ignoring %s\n", MAX_ENTRIES, ent->d_name);
+				break;
+			}
+				
 			strcpy(entries[nextfree].filename ,ent->d_name);
 			entries[nextfree].mtime = st->st_mtime;
 			entries[nextfree].fh = fopen(ent->d_name,"r");
 			fseek(entries[nextfree].fh,0,SEEK_END);
-			nextfree++;
-		}
-		i++;
-		if(i == MAX_ENTRIES) {
-			fprintf(stderr,"more than max files (%d) in folder\n",MAX_ENTRIES);
-			break;
 		}
 	}
-	entries[i].mtime = 0;
 	closedir(dir);
 }
 
@@ -83,10 +96,15 @@ int main(int argc, char **argv)
 		struct stat st_,*st=&st_;
 		int i;
 		int foundit = 0;
+		int error = 0;
 		update();
-		for(i=0;;i++) {
-			if(!entries[i].mtime) break;
-			stat(entries[i].filename, st);
+		for(i = 0; i < MAX_ENTRIES ; i++) {
+			if(!entries[i].mtime) continue;
+			error = stat(entries[i].filename, st);
+			if (error < 0) {
+				close_entry(i);
+				continue;
+			}
 			if(st->st_mtime > entries[i].mtime) {
 				entries[i].mtime = st->st_mtime;
 				while((fgets(buf,1024,entries[i].fh)) != NULL) {
@@ -95,8 +113,9 @@ int main(int argc, char **argv)
 				foundit = 1;
 			}
 		}
-		if(!foundit)
-        		sleep(SNOOZE);
+		if(!foundit) {
+			sleep(SNOOZE);
+        }
 	}
 
 	return 0;
